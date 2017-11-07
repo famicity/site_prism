@@ -1,9 +1,10 @@
 module SitePrism
   module ElementContainer
     attr_reader :mapped_items
+    attr_reader :defined_elements
 
     def element(element_name, *find_args)
-      build element_name, *find_args do
+      build :element, element_name, *find_args do
         define_method element_name.to_s do |*runtime_args, &element_block|
           self.class.raise_if_block(self, element_name.to_s, !element_block.nil?)
           find_first(*find_args, *runtime_args)
@@ -12,7 +13,7 @@ module SitePrism
     end
 
     def elements(collection_name, *find_args)
-      build collection_name, *find_args do
+      build :elements, collection_name, *find_args do
         define_method collection_name.to_s do |*runtime_args, &element_block|
           self.class.raise_if_block(self, collection_name.to_s, !element_block.nil?)
           find_all(*find_args, *runtime_args)
@@ -23,7 +24,7 @@ module SitePrism
 
     def section(section_name, *args, &block)
       section_class, find_args = extract_section_options args, &block
-      build section_name, *find_args do
+      build :section, section_name, *find_args do
         define_method section_name do |*runtime_args, &runtime_block|
           section_class.new self, find_first(*find_args, *runtime_args), &runtime_block
         end
@@ -32,7 +33,7 @@ module SitePrism
 
     def sections(section_collection_name, *args, &block)
       section_class, find_args = extract_section_options args, &block
-      build section_collection_name, *find_args do
+      build :sections, section_collection_name, *find_args do
         define_method section_collection_name do |*runtime_args, &element_block|
           self.class.raise_if_block(self, section_collection_name.to_s, !element_block.nil?)
           find_all(*find_args, *runtime_args).map do |element|
@@ -61,6 +62,11 @@ module SitePrism
       @mapped_items << item.to_s
     end
 
+    def add_to_defined_elements(item, type)
+      @defined_elements ||= {}
+      @defined_elements[item.to_sym] = { type: type }
+    end
+
     def raise_if_block(obj, name, has_block)
       return unless has_block
       raise SitePrism::UnsupportedBlock, "#{obj.class}##{name} does not accept blocks, did you mean to define a (i)frame?"
@@ -68,11 +74,12 @@ module SitePrism
 
     private
 
-    def build(name, *find_args)
+    def build(type, name, *find_args)
       if find_args.empty?
         create_no_selector name
       else
         add_to_mapped_items name
+        add_to_defined_elements name, type
         yield
       end
       add_helper_methods name, *find_args
