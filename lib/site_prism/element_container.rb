@@ -62,9 +62,10 @@ module SitePrism
       @mapped_items << item.to_s
     end
 
-    def add_to_defined_elements(item, type)
+    def add_to_defined_elements(item, type, meta)
+      meta ||= {}
       @defined_elements ||= {}
-      @defined_elements[item.to_sym] = { type: type }
+      @defined_elements[item.to_sym] = { type: type }.merge(meta)
     end
 
     def raise_if_block(obj, name, has_block)
@@ -78,8 +79,14 @@ module SitePrism
       if find_args.empty?
         create_no_selector name
       else
+        meta = if find_args.last.is_a?(Hash)
+          find_args.last.delete(:meta)
+        else
+          {}
+        end
+
         add_to_mapped_items name
-        add_to_defined_elements name, type
+        add_to_defined_elements name, type, meta
         yield
       end
       add_helper_methods name, *find_args
