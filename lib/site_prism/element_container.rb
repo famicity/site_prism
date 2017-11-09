@@ -80,7 +80,7 @@ module SitePrism
         create_no_selector name
       else
         meta = if find_args.last.is_a?(Hash)
-          find_args.last.delete(:meta)
+          find_args.last.delete(:meta) || {}
         else
           {}
         end
