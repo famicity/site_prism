@@ -84,7 +84,7 @@ module SitePrism
         else
           {}
         end
-        meta[:visibility] ||= :always
+        meta[:visibility] ||= :always unless type.in? [:elements, :sections]
 
         add_to_mapped_items name
         add_to_defined_elements name, type, meta
