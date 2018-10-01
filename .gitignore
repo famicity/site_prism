@@ -1,9 +1,5 @@
-doc/*
-.yardoc/*
 .DS_Store
-notes.txt
 Gemfile.lock
-coverage
-.bundle
-.ruby-version
-.ruby-gemset
+coverage/*
+.idea
+.env

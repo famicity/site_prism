@@ -1,349 +1,437 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 describe SitePrism::Page do
+  class BlankPage < SitePrism::Page; end
+  class PageWithUrl < SitePrism::Page
+    set_url '/bob'
+  end
+  class PageWithUriTemplate < SitePrism::Page
+    set_url '/users{/username}{?query*}'
+  end
+  class PageWithUrlMatcher < SitePrism::Page
+    set_url_matcher(/bob/)
+  end
+
+  let!(:locator) { instance_double('Capybara::Node::Element') }
+  let(:blank_page) { BlankPage.new }
+  let(:page_with_url) { PageWithUrl.new }
+  let(:page_with_uri_template) { PageWithUriTemplate.new }
+  let(:page_with_url_matcher) { PageWithUrlMatcher.new }
+
   before do
-    allow(SitePrism::Waiter).to receive(:default_wait_time).and_return 0
+    allow(SitePrism::Waiter).to receive(:default_wait_time).and_return(0)
   end
 
-  it 'should respond to load' do
-    expect(SitePrism::Page.new).to respond_to :load
+  it 'responds to set_url' do
+    expect(SitePrism::Page).to respond_to(:set_url)
   end
 
-  it 'should respond to set_url' do
-    expect(SitePrism::Page).to respond_to :set_url
+  it 'responds to set_url_matcher' do
+    expect(SitePrism::Page).to respond_to(:set_url_matcher)
   end
 
   it 'should be able to set a url against it' do
-    class PageToSetUrlAgainst < SitePrism::Page
-      set_url '/bob'
-    end
-    page = PageToSetUrlAgainst.new
-    expect(page.url).to eq('/bob')
+    expect(page_with_url.url).to eq('/bob')
   end
 
   it 'url should be nil by default' do
-    class PageDefaultUrl < SitePrism::Page; end
-    page = PageDefaultUrl.new
-    expect(PageDefaultUrl.url).to be_nil
-    expect(page.url).to be_nil
+    expect(blank_page.url).to be_nil
   end
 
-  describe 'loaded?' do
-    it 'is true if displayed' do
-      page = SitePrism::Page.new
-      allow(page).to receive(:displayed?).and_return true
-      expect(page).to be_loaded
+  it 'url matcher should be nil by default' do
+    expect(BlankPage.url_matcher).to be_nil
+
+    expect(blank_page.url_matcher).to be_nil
+  end
+
+  it 'should be able to set a url matcher against it' do
+    expect(page_with_url_matcher.url_matcher).to eq(/bob/)
+  end
+
+  it 'should allow calls to displayed? if the url matcher has been set' do
+    expect { page_with_url_matcher.displayed? }.not_to raise_error
+  end
+
+  it "should raise an exception if displayed? \
+is called before the matcher has been set" do
+    expect { blank_page.displayed? }
+      .to raise_error(SitePrism::NoUrlMatcherForPageError)
+  end
+
+  it 'should expose the page title' do
+    expect(blank_page).to respond_to(:title)
+  end
+
+  it 'should raise an exception if passing a block to an element' do
+    expect { Home.new.go_button { :any_old_block } }
+      .to raise_error(SitePrism::UnsupportedBlockError)
+      .with_message('Home#go_button does not accept blocks.')
+  end
+
+  it 'should raise an exception if passing a block to elements' do
+    expect { Home.new.rows { :any_old_block } }
+      .to raise_error(SitePrism::UnsupportedBlockError)
+      .with_message('Home#rows does not accept blocks.')
+  end
+
+  it 'should raise an exception if passing a block to sections' do
+    expect { Home.new.removing_sections { :any_old_block } }
+      .to raise_error(SitePrism::UnsupportedBlockError)
+      .with_message('Home#removing_sections does not accept blocks.')
+  end
+
+  it { is_expected.to respond_to(*Capybara::Session::DSL_METHODS) }
+
+  describe '#page' do
+    subject { page_with_url.page }
+
+    context 'with #load called previously' do
+      before { page_with_url.instance_variable_set(:@page, :some_value) }
+
+      it { is_expected.to eq(:some_value) }
     end
 
-    it 'is false if not displayed' do
-      page = SitePrism::Page.new
-      allow(page).to receive(:displayed?).and_return false
-      expect(page).not_to be_loaded
+    context 'with #load not called previously' do
+      it { is_expected.to eq(Capybara.current_session) }
     end
   end
 
   describe '#load' do
     it "should not allow loading if the url hasn't been set" do
-      class MyPageWithNoUrl < SitePrism::Page; end
-      page_with_no_url = MyPageWithNoUrl.new
-      expect { page_with_no_url.load }.to raise_error(SitePrism::NoUrlForPage)
+      expect { blank_page.load }
+        .to raise_error(SitePrism::NoUrlForPageError)
     end
 
     it 'should allow loading if the url has been set' do
-      class MyPageWithUrl < SitePrism::Page
-        set_url '/bob'
-      end
-      page_with_url = MyPageWithUrl.new
-      expect { page_with_url.load }.to_not raise_error
+      expect { page_with_url.load }.not_to raise_error
     end
 
     it 'should allow expansions if the url has them' do
-      class MyPageWithUriTemplate < SitePrism::Page
-        set_url '/users{/username}{?query*}'
-      end
-      page_with_url = MyPageWithUriTemplate.new
-      expect { page_with_url.load(username: 'foobar') }.to_not raise_error
-      expect(page_with_url.url(username: 'foobar', query: { 'recent_posts' => 'true' })).to eq('/users/foobar?recent_posts=true')
-      expect(page_with_url.url(username: 'foobar')).to eq('/users/foobar')
-      expect(page_with_url.url).to eq('/users')
+      expect do
+        page_with_uri_template.load(username: 'foobar')
+      end.not_to raise_error
+
+      expect(
+        page_with_uri_template
+        .url(username: 'foobar', query: { 'recent_posts' => 'true' })
+      ).to eq('/users/foobar?recent_posts=true')
+
+      expect(page_with_uri_template.url).to eq('/users')
     end
 
     it 'should allow to load html' do
-      class Page < SitePrism::Page; end
-      page = Page.new
-      expect { page.load('<html/>') }.to_not raise_error
+      expect { page_with_url.load('<html/>') }.not_to raise_error
     end
 
     context 'when passed a block' do
-      let(:page_klass_with_load_validations) do
-        Class.new(SitePrism::Page) do
-          set_url '/foo_page'
+      class PageWithLoadValidations < SitePrism::Page
+        set_url '/foo_page'
 
-          def must_be_true
-            true
-          end
+        def must_be_true
+          true
+        end
 
-          def also_true
-            true
-          end
+        def also_true
+          true
+        end
 
-          def foo?
-            true
-          end
+        def foo?
+          true
+        end
 
-          load_validation { [must_be_true, 'It is not true!'] }
-          load_validation { [also_true, 'It is not also true!'] }
+        load_validation { [must_be_true, 'It is not true!'] }
+        load_validation { [also_true, 'It is not also true!'] }
+      end
+
+      let(:page_with_load_validations) { PageWithLoadValidations.new }
+
+      it 'should allow to load html and yields itself' do
+        expect(blank_page.load('<html>hi<html/>', &:text)).to eq('hi')
+      end
+
+      context 'With Passing Load Validations' do
+        it 'executes the block' do
+          expect(page_with_load_validations.load { :return_this })
+            .to eq(:return_this)
+        end
+
+        it 'yields itself to the passed block' do
+          expect(page_with_load_validations).to receive(:foo?).and_call_original
+
+          page_with_load_validations.load(&:foo?)
         end
       end
 
-      it 'executes a block when load validations pass' do
-        page = page_klass_with_load_validations.new
-        expect { page.load { true } }.not_to raise_error
-      end
+      context 'With Failing Load Validations' do
+        it 'raises an error' do
+          allow(page_with_load_validations)
+            .to receive(:must_be_true).and_return(false)
 
-      it 'yields itself to the passed block' do
-        page = page_klass_with_load_validations.new
-        expect(page).to receive(:foo?)
-        page.load { |p| p.foo? && true }
-      end
-
-      it 'raises an error when a block passed and load validations fail' do
-        page = page_klass_with_load_validations.new
-        expect(page).to receive(:must_be_true).and_return(false)
-        expect { page.load { puts 'foo' } }.to raise_error(SitePrism::NotLoadedError, /It is not true!/)
+          expect { page_with_load_validations.load { puts 'foo' } }
+            .to raise_error(SitePrism::FailedLoadValidationError)
+            .with_message('Failed to load. Reason: It is not true!')
+        end
       end
     end
   end
 
-  it 'should respond to set_url_matcher' do
-    expect(SitePrism::Page).to respond_to :set_url_matcher
-  end
+  describe '#displayed?' do
+    context 'with a full string URL matcher' do
+      class PageWithStringFullUrlMatcher < SitePrism::Page
+        set_url_matcher 'https://joe:bump@bla.org:443/foo?bar=baz&bar=boof#frag'
+      end
 
-  it 'url matcher should be nil by default' do
-    class PageDefaultUrlMatcher < SitePrism::Page; end
-    page = PageDefaultUrlMatcher.new
-    expect(PageDefaultUrlMatcher.url_matcher).to be_nil
-    expect(page.url_matcher).to be_nil
-  end
+      let(:page) { PageWithStringFullUrlMatcher.new }
 
-  it 'should be able to set a url matcher against it' do
-    class PageToSetUrlMatcherAgainst < SitePrism::Page
-      set_url_matcher(/bob/)
-    end
-    page = PageToSetUrlMatcherAgainst.new
-    expect(page.url_matcher).to eq(/bob/)
-  end
+      it 'matches with all elements matching' do
+        swap_current_url(
+          'https://joe:bump@bla.org:443/foo?bar=baz&bar=boof#frag'
+        )
 
-  it 'should raise an exception if displayed? is called before the matcher has been set' do
-    class PageWithNoMatcher < SitePrism::Page; end
-    expect { PageWithNoMatcher.new.displayed? }.to raise_error SitePrism::NoUrlMatcherForPage
-  end
+        expect(page.displayed?).to be true
+      end
 
-  it 'should allow calls to displayed? if the url matcher has been set' do
-    class PageWithUrlMatcher < SitePrism::Page
-      set_url_matcher(/bob/)
-    end
-    page = PageWithUrlMatcher.new
-    expect { page.displayed? }.to_not raise_error
-  end
+      it "doesn't match with a non-matching fragment" do
+        swap_current_url(
+          'https://joe:bump@bla.org:443/foo?bar=baz&bar=boof#otherfr'
+        )
 
-  describe 'with a bogus URL matcher' do
-    class PageWithBogusFullUrlMatcher < SitePrism::Page
-      set_url_matcher this: "isn't a URL matcher"
-    end
+        expect(page.displayed?).to be false
+      end
 
-    let(:page) { PageWithBogusFullUrlMatcher.new }
+      it "doesn't match with a missing param" do
+        swap_current_url('https://joe:bump@bla.org:443/foo?bar=baz#frag')
 
-    specify '#url_matches raises InvalidUrlMatcher' do
-      expect { page.url_matches }.to raise_error SitePrism::InvalidUrlMatcher
-    end
+        expect(page.displayed?).to be false
+      end
 
-    specify '#displayed? raises InvalidUrlMatcher' do
-      expect { page.displayed? }.to raise_error SitePrism::InvalidUrlMatcher
-    end
-  end
+      it "doesn't match with wrong path" do
+        swap_current_url(
+          'https://joe:bump@bla.org:443/not_foo?bar=baz&bar=boof#frag'
+        )
 
-  describe 'with a full string URL matcher' do
-    class PageWithStringFullUrlMatcher < SitePrism::Page
-      set_url_matcher 'https://joe:bump@bla.org:443/foo?bar=baz&bar=boof#myfragment'
-    end
+        expect(page.displayed?).to be false
+      end
 
-    let(:page) { PageWithStringFullUrlMatcher.new }
+      it "doesn't match with wrong host" do
+        swap_current_url(
+          'https://joe:bump@blabber.org:443/foo?bar=baz&bar=boof#frag'
+        )
 
-    it 'matches with all elements matching' do
-      swap_current_url('https://joe:bump@bla.org:443/foo?bar=baz&bar=boof#myfragment')
-      expect(page.displayed?).to eq(true)
-    end
+        expect(page.displayed?).to be false
+      end
 
-    it "doesn't match with a non-matching fragment" do
-      swap_current_url('https://joe:bump@bla.org:443/foo?bar=baz&bar=boof#otherfragment')
-      expect(page.displayed?).to eq(false)
-    end
+      it "doesn't match with wrong user" do
+        swap_current_url(
+          'https://joseph:bump@bla.org:443/foo?bar=baz&bar=boof#frag'
+        )
 
-    it "doesn't match with a missing param" do
-      swap_current_url('https://joe:bump@bla.org:443/foo?bar=baz#myfragment')
-      expect(page.displayed?).to eq(false)
-    end
+        expect(page.displayed?).to be false
+      end
 
-    it "doesn't match with wrong path" do
-      swap_current_url('https://joe:bump@bla.org:443/not_foo?bar=baz&bar=boof#myfragment')
-      expect(page.displayed?).to eq(false)
-    end
+      it "doesn't match with wrong password" do
+        swap_current_url(
+          'https://joe:bean@bla.org:443/foo?bar=baz&bar=boof#frag'
+        )
 
-    it "doesn't match with wrong host" do
-      swap_current_url('https://joe:bump@blabber.org:443/foo?bar=baz&bar=boof#myfragment')
-      expect(page.displayed?).to eq(false)
-    end
+        expect(page.displayed?).to be false
+      end
 
-    it "doesn't match with wrong user" do
-      swap_current_url('https://joseph:bump@bla.org:443/foo?bar=baz&bar=boof#myfragment')
-      expect(page.displayed?).to eq(false)
+      it "doesn't match with wrong scheme" do
+        swap_current_url(
+          'http://joe:bump@bla.org:443/foo?bar=baz&bar=boof#frag'
+        )
+
+        expect(page.displayed?).to be false
+      end
+
+      it "doesn't match with wrong port" do
+        swap_current_url(
+          'https://joe:bump@bla.org:8000/foo?bar=baz&bar=boof#frag'
+        )
+
+        expect(page.displayed?).to be false
+      end
     end
 
-    it "doesn't match with wrong password" do
-      swap_current_url('https://joe:bean@bla.org:443/foo?bar=baz&bar=boof#myfragment')
-      expect(page.displayed?).to eq(false)
+    context 'with a minimal URL matcher' do
+      class PageWithStringMinimalUrlMatcher < SitePrism::Page
+        set_url_matcher '/foo'
+      end
+
+      let(:page) { PageWithStringMinimalUrlMatcher.new }
+
+      it 'matches a complex URL by only path' do
+        swap_current_url(
+          'https://joe:bump@bla.org:443/foo?bar=baz&bar=boof#frag'
+        )
+
+        expect(page.displayed?).to be true
+      end
     end
 
-    it "doesn't match with wrong scheme" do
-      swap_current_url('http://joe:bump@bla.org:443/foo?bar=baz&bar=boof#myfragment')
-      expect(page.displayed?).to eq(false)
+    context 'with an implicit matcher' do
+      class PageWithImplicitUrlMatcher < SitePrism::Page
+        set_url '/foo'
+      end
+
+      let(:page) { PageWithImplicitUrlMatcher.new }
+
+      it 'should default the matcher to the url' do
+        expect(page.url_matcher).to eq('/foo')
+      end
+
+      it 'matches a realistic local dev URL' do
+        swap_current_url('http://localhost:3000/foo')
+
+        expect(page.displayed?).to be true
+      end
     end
 
-    it "doesn't match with wrong port" do
-      swap_current_url('https://joe:bump@bla.org:8000/foo?bar=baz&bar=boof#myfragment')
-      expect(page.displayed?).to eq(false)
-    end
-  end
+    context 'with a parameterized URL matcher' do
+      class PageWithParameterizedUrlMatcher < SitePrism::Page
+        set_url_matcher '{scheme}:///foos{/id}'
+      end
 
-  context 'with a minimal URL matcher' do
-    class PageWithStringMinimalUrlMatcher < SitePrism::Page
-      set_url_matcher '/foo'
-    end
+      let(:page) { PageWithParameterizedUrlMatcher.new }
 
-    let(:page) { PageWithStringMinimalUrlMatcher.new }
-
-    it 'matches a complex URL by only path' do
-      swap_current_url('https://joe:bump@bla.org:443/foo?bar=baz&bar=boof#myfragment')
-      expect(page.displayed?).to eq(true)
-    end
-  end
-
-  context 'with an implicit matcher' do
-    class PageWithImplicitUrlMatcher < SitePrism::Page
-      set_url '/foo'
-    end
-
-    let(:page) { PageWithImplicitUrlMatcher.new }
-
-    it 'should default the matcher to the url' do
-      expect(page.url_matcher).to eq('/foo')
-    end
-
-    it 'matches a realistic local dev URL' do
-      swap_current_url('http://localhost:3000/foo')
-      expect(page.displayed?).to eq(true)
-    end
-  end
-
-  context 'with a parameterized URL matcher' do
-    class PageWithParameterizedUrlMatcher < SitePrism::Page
-      set_url_matcher '{scheme}:///foos{/id}'
-    end
-
-    let(:page) { PageWithParameterizedUrlMatcher.new }
-
-    describe '#displayed?' do
       it 'returns true without expected_mappings provided' do
         swap_current_url('http://localhost:3000/foos/28')
-        expect(page.displayed?).to eq(true)
+
+        expect(page.displayed?).to be true
       end
 
       it 'returns true with correct expected_mappings provided' do
         swap_current_url('http://localhost:3000/foos/28')
-        expect(page.displayed?(id: 28)).to eq(true)
+
+        expect(page.displayed?(id: 28)).to be true
       end
 
       it 'returns false with incorrect expected_mappings provided' do
         swap_current_url('http://localhost:3000/foos/28')
-        expect(page.displayed?(id: 17)).to eq(false)
+
+        expect(page.displayed?(id: 17)).to be false
+      end
+
+      it "passes through incorrect expected_mappings \
+from the be_displayed matcher" do
+        swap_current_url('http://localhost:3000/foos/28')
+
+        expect(page).not_to be_displayed(id: 17)
+      end
+
+      it "passes through correct expected_mappings \
+from the be_displayed matcher" do
+        swap_current_url('http://localhost:3000/foos/28')
+
+        expect(page).to be_displayed(id: 28)
       end
     end
 
-    it 'passes through incorrect expected_mappings from the be_displayed matcher' do
-      swap_current_url('http://localhost:3000/foos/28')
-      expect(page).not_to be_displayed id: 17
-    end
-
-    it 'passes through correct expected_mappings from the be_displayed matcher' do
-      swap_current_url('http://localhost:3000/foos/28')
-      expect(page).to be_displayed id: 28
-    end
-
-    describe '#url_matches' do
-      it 'returns mappings from the current_url' do
-        swap_current_url('http://localhost:3000/foos/15')
-        expect(page.url_matches).to eq 'scheme' => 'http', 'id' => '15'
+    context 'with a bogus URL matcher' do
+      class PageWithBogusFullUrlMatcher < SitePrism::Page
+        set_url_matcher this: "isn't a URL matcher"
       end
 
-      it "returns nil if current_url doesn't match the url_matcher" do
-        swap_current_url('http://localhost:3000/bars/15')
-        expect(page.url_matches).to eq nil
+      let(:page) { PageWithBogusFullUrlMatcher.new }
+      let(:error_message) do
+        'Your URL and/or matcher could not be interpreted.'
+      end
+
+      it 'raises InvalidUrlMatcherError' do
+        expect { page.displayed? }
+          .to raise_error(SitePrism::InvalidUrlMatcherError)
+          .with_message(error_message)
       end
     end
   end
 
-  describe 'with a regexp matcher' do
-    class PageWithRegexpUrlMatcher < SitePrism::Page
-      set_url_matcher(/foos\/(\d+)/)
+  describe '#url_matches' do
+    context 'with a templated matcher' do
+      class PageWithParameterizedUrlMatcher < SitePrism::Page
+        set_url_matcher '{scheme}:///foos{/id}'
+      end
+
+      let(:page) { PageWithParameterizedUrlMatcher.new }
+
+      it 'returns mappings from the current_url' do
+        swap_current_url('http://localhost:3000/foos/15')
+
+        expect(page.url_matches).to eq('scheme' => 'http', 'id' => '15')
+      end
+
+      it "returns nil if current_url doesn't match the url_matcher" do
+        swap_current_url('http://localhost:3000/bars/15')
+
+        expect(page.url_matches).to be_nil
+      end
     end
 
-    let(:page) { PageWithRegexpUrlMatcher.new }
+    context 'with a regexp matcher' do
+      class PageWithRegexpUrlMatcher < SitePrism::Page
+        set_url_matcher(/foos\/(\d+)/)
+      end
 
-    describe '#url_matches' do
+      let(:page) { PageWithRegexpUrlMatcher.new }
+
       it 'returns regexp MatchData' do
         swap_current_url('http://localhost:3000/foos/15')
+
         expect(page.url_matches).to be_kind_of(MatchData)
       end
 
       it 'lets you get at the captures' do
         swap_current_url('http://localhost:3000/foos/15')
-        expect(page.url_matches[1]).to eq '15'
+
+        expect(page.url_matches[1]).to eq('15')
       end
 
       it "returns nil if current_url doesn't match the url_matcher" do
         swap_current_url('http://localhost:3000/bars/15')
-        expect(page.url_matches).to eq nil
+
+        expect(page.url_matches).to be nil
+      end
+    end
+
+    context 'with a bogus URL matcher' do
+      class PageWithBogusFullUrlMatcher < SitePrism::Page
+        set_url_matcher this: "isn't a URL matcher"
+      end
+
+      let(:page) { PageWithBogusFullUrlMatcher.new }
+      let(:error_message) do
+        'Your URL and/or matcher could not be interpreted.'
+      end
+
+      it 'raises InvalidUrlMatcherError' do
+        expect { page.url_matches }
+          .to raise_error(SitePrism::InvalidUrlMatcherError)
+          .with_message(error_message)
       end
     end
   end
 
-  it 'should expose the page title' do
-    expect(SitePrism::Page.new).to respond_to :title
+  describe '#execute_script' do
+    it 'delegates through Capybara.current_session' do
+      expect(Capybara.current_session)
+        .to receive(:execute_script)
+        .with('JUMP!')
+
+      blank_page.execute_script('JUMP!')
+    end
   end
 
-  it 'should raise an exception if passing a block to an element' do
-    expect do
-      TestHomePage.new.invisible_element do
-        puts 'bla'
-      end
-    end.to raise_error(SitePrism::UnsupportedBlock)
-  end
+  describe '#evaluate_script' do
+    it 'delegates through Capybara.current_session' do
+      expect(Capybara.current_session)
+        .to receive(:evaluate_script)
+        .with('How High?')
+        .and_return('To the sky!')
 
-  it 'should raise an exception if passing a block to elements' do
-    expect do
-      TestHomePage.new.lots_of_links do
-        puts 'bla'
-      end
-    end.to raise_error(SitePrism::UnsupportedBlock)
-  end
-
-  it 'should raise an exception if passing a block to sections' do
-    expect do
-      TestHomePage.new.nonexistent_section do
-        puts 'bla'
-      end
-    end.to raise_error(SitePrism::UnsupportedBlock)
+      expect(blank_page.evaluate_script('How High?')).to eq('To the sky!')
+    end
   end
 
   def swap_current_url(url)

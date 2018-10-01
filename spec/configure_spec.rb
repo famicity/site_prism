@@ -1,14 +1,15 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
-describe SitePrism do
-  it 'should have implicit waits disabled by default' do
-    expect(SitePrism.use_implicit_waits).to be false
-  end
+describe 'SitePrism configuration' do
+  subject { SitePrism.configure { |config| config.unused_config = true } }
 
-  it 'can be configured to use implicit waits' do
-    SitePrism.configure do |config|
-      config.use_implicit_waits = true
-    end
-    expect(SitePrism.use_implicit_waits).to be true
+  let(:warning_message_one) { 'SitePrism configuration is now removed.' }
+  let(:warning_message_two) { 'All options fed directly from Capybara.' }
+  let(:warning_message) { "#{warning_message_one}\n#{warning_message_two}\n" }
+
+  it 'should warn users that no more configuration is possible' do
+    expect { subject }.to output(warning_message).to_stderr
   end
 end

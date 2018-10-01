@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Home Page</title>
+    <script type="text/javascript">
+    function removeElement(node) {
+      node.parentNode.removeChild(node);
+    }
+
+    function load() {
+      //create the links
+      slow_link1 = document.createElement("a");
+      slow_link2 = document.createElement("a");
+      //get the element that we're going to add the links to
+      dumping_ground = document.getElementById('dumping_ground');
+      //wait for a short while then add the links
+      setTimeout(function() {
+        [slow_link1, slow_link2].forEach(function(item, index) {
+          //set the class/href/text properties
+          item.setAttribute("class", "slow");
+          item.setAttribute('href', 'slowly.htm');
+          item.innerText = "slow link" + (index + 1);
+          dumping_ground.appendChild(item);
+          dumping_ground.append(" ");
+        });
+      }, 950);
+
+      setTimeout("document.getElementById('will_become_visible').style.display='block';", 950);
+      setTimeout("document.getElementById('will_become_invisible').style.display='none';", 950);
+      setTimeout("document.getElementById('will_become_nonexistent').remove();", 950);
+      setTimeout("document.getElementById('removing_link_div').remove();", 950);
+
+      slow_section = document.createElement("div");
+      slow_section.className = 'slow-section first';
+      slow_section2 = document.createElement("div");
+      slow_section2.className = 'slow-section second';
+      setTimeout(function() {
+        [slow_section, slow_section2].forEach(function(item) {
+          dumping_ground.appendChild(item);
+        });
+      }, 950)
+    }
+    window.onload = load;
+    </script>
+  </head>
+  <body>
+    <h1>Welcome</h1>
+    <span class="welcome">This is the home page, there is some stuff on it</span>
+    <p>
+      <a href="no_title.htm">
+        <input type="button" value="Go!"/>
+      </a>
+    </p>
+    <p>
+      <a href="search.htm" class="link link--undefined">Search Page</a>
+    </p>
+    <table>
+      <tr>
+        <td class="element_a">a</td>
+        <td class="element_b">b</td>
+        <td class="element_c">c</td>
+      </tr>
+    </table>
+
+    <article class="people">
+      <h2>People</h2>
+      <span class="person">person 1</span>
+      <span class="person">person 2</span>
+      <span class="person">person 3</span>
+      <span class="person">person 4</span>
+      <span class="object">object 1</span>
+    </article>
+
+    <input type="submit" id="remove_container" onClick='removeElement(document.getElementById("container"))'/>
+
+    <div id="container">
+      <div class="embedded_element">
+        This will be removed when you click submit above
+      </div>
+    </div>
+
+    <div id="removing_link_div">
+      <a href="a.html">a</a>
+      <a href="b.html">b</a>
+      <a href="c.html">c</a>
+    </div>
+
+    <p id="dumping_ground"></p>
+
+    <input type="submit" id="will_become_nonexistent" value="Will become non-existent"/>
+    <input type="submit" id="will_become_visible" value="Will become visible" style="display: none;"/>
+    <input type="submit" id="will_become_invisible" value="Will become invisible" style="display: block;"/>
+    <input type="submit" class="invisible" value="Invisible" style="display: none;"/>
+
+    <div id="section_for_iframe">
+      <iframe id="the_iframe" name="the_iframe" src="iframe.htm"></iframe>
+    </div>
+  </body>
+</html>

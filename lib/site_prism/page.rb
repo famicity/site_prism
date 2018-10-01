@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'site_prism/loadable'
 
 module SitePrism
@@ -5,47 +7,51 @@ module SitePrism
     include Capybara::DSL
     include ElementChecker
     include Loadable
-    extend ElementContainer
+    include ElementContainer
 
-    load_validation do
-      [displayed?, "Expected #{current_url} to match #{url_matcher} but it did not."]
-    end
+    # When instantiating the page. A default validation will be added to all
+    # validations you define and add to the Page Class.
+    # When calling #load, all of the validations that are set will be ran
+    # in order, with the default "displayed?" validation being ran _FIRST_
 
     def page
       @page || Capybara.current_session
     end
 
     # Loads the page.
-    # Executes the block, if given, after running load validations on the page.
-    #
     # @param expansion_or_html
-    # @param block [&block] A block to run once the page is loaded.  The page will yield itself into the block.
+    # @param block [&block] An optional block to run once the page is loaded.
+    # The page will yield the block if defined.
+    #
+    # Executes the block, if given.
+    # Runs load validations on the page, unless input is a string
     def load(expansion_or_html = {}, &block)
       self.loaded = false
 
-      if expansion_or_html.is_a? String
+      if expansion_or_html.is_a?(String)
         @page = Capybara.string(expansion_or_html)
+        yield self if block_given?
       else
         expanded_url = url(expansion_or_html)
-        raise SitePrism::NoUrlForPage if expanded_url.nil?
+        raise SitePrism::NoUrlForPageError unless expanded_url
         visit expanded_url
+        when_loaded(&block) if block_given?
       end
-
-      when_loaded(&block) if block_given?
     end
 
     def displayed?(*args)
       expected_mappings = args.last.is_a?(::Hash) ? args.pop : {}
-      seconds = !args.empty? ? args.first : Waiter.default_wait_time
-      raise SitePrism::NoUrlMatcherForPage if url_matcher.nil?
+      seconds = !args.empty? ? args.first : Capybara.default_max_wait_time
+
+      raise SitePrism::NoUrlMatcherForPageError unless url_matcher
       begin
         Waiter.wait_until_true(seconds) { url_matches?(expected_mappings) }
-      rescue SitePrism::TimeoutException
+      rescue SitePrism::TimeoutError
         false
       end
     end
 
-    def url_matches(seconds = Waiter.default_wait_time)
+    def url_matches(seconds = Capybara.default_max_wait_time)
       return unless displayed?(seconds)
 
       if url_matcher.is_a?(Regexp)
@@ -53,14 +59,6 @@ module SitePrism
       else
         template_backed_matches
       end
-    end
-
-    def regexp_backed_matches
-      url_matcher.match(page.current_url)
-    end
-
-    def template_backed_matches
-      matcher_template.mappings(page.current_url)
     end
 
     def self.set_url(page_url)
@@ -71,8 +69,8 @@ module SitePrism
       @url_matcher = page_url_matcher
     end
 
-    def self.url
-      @url
+    class << self
+      attr_reader :url
     end
 
     def self.url_matcher
@@ -89,16 +87,16 @@ module SitePrism
     end
 
     def secure?
-      page.current_url.start_with? 'https'
+      page.current_url.start_with?('https')
     end
 
     private
 
-    def find_first(*find_args)
+    def _find(*find_args)
       page.find(*find_args)
     end
 
-    def find_all(*find_args)
+    def _all(*find_args)
       page.all(*find_args)
     end
 
@@ -110,13 +108,21 @@ module SitePrism
       page.has_no_selector?(*find_args)
     end
 
+    def regexp_backed_matches
+      url_matcher.match(page.current_url)
+    end
+
+    def template_backed_matches
+      matcher_template.mappings(page.current_url)
+    end
+
     def url_matches?(expected_mappings = {})
       if url_matcher.is_a?(Regexp)
         url_matches_by_regexp?
       elsif url_matcher.respond_to?(:to_str)
         url_matches_by_template?(expected_mappings)
       else
-        raise SitePrism::InvalidUrlMatcher
+        raise SitePrism::InvalidUrlMatcherError
       end
     end
 
@@ -129,7 +135,7 @@ module SitePrism
     end
 
     def matcher_template
-      @addressable_url_matcher ||= AddressableUrlMatcher.new(url_matcher)
+      @matcher_template ||= AddressableUrlMatcher.new(url_matcher)
     end
   end
 end

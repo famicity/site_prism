@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 unless ENV['CI']
   require 'simplecov'
   SimpleCov.start
@@ -5,34 +7,23 @@ end
 
 require 'capybara'
 require 'capybara/dsl'
-require 'selenium-webdriver'
 
-$LOAD_PATH << './test_site'
 $LOAD_PATH << './lib'
+$LOAD_PATH << './features/support'
 
 require 'site_prism'
-require 'test_site'
-require 'sections/people'
-require 'sections/no_element_within_section'
-require 'sections/container_with_element'
-require 'pages/my_iframe'
+require 'sections/all'
 require 'pages/home'
 
-RSpec.configure do |config|
-  config.expect_with :rspec do |c|
-    c.syntax = %i[should expect]
-  end
-end
+Capybara.default_max_wait_time = 0
 
-class MyTest
-  def response
-    [200, { 'Content-Length' => '9' }, ['MyTestApp']]
-  end
+RSpec.configure do |config|
+  config.default_formatter = :documentation
 end
 
 class MyTestApp
   def call(_env)
-    MyTest.new.response
+    [200, { 'Content-Length' => '9' }, ['MyTestApp']]
   end
 end
 

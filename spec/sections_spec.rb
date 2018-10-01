@@ -1,26 +1,51 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 describe SitePrism::Page do
-  it 'should respond to sections' do
-    expect(SitePrism::Page).to respond_to :sections
+  subject { Page.new }
+
+  class PluralSections < SitePrism::Section; end
+
+  class PluralSectionsWithDefaults < SitePrism::Section
+    set_default_search_arguments :css, '.section'
   end
 
-  it 'should create a matching existence method for sections' do
-    class SomePageWithSectionsThatNeedsTestingForExistence < SitePrism::Section
+  class Page < SitePrism::Page
+    sections :plural_sections,               PluralSections, '.tim'
+    sections :plural_sections_with_defaults, PluralSectionsWithDefaults
+  end
+
+  describe '.sections' do
+    it 'should be settable' do
+      expect(SitePrism::Page).to respond_to(:sections)
+
+      expect(SitePrism::Section).to respond_to(:sections)
+    end
+  end
+
+  it 'should return an enumerable result' do
+    expect(subject.plural_sections).to be_an Array
+  end
+
+  context "when using sections with default search arguments \
+and without search arguments" do
+    let(:search_arguments) { [:css, '.section'] }
+
+    before do
+      allow(subject)
+        .to receive(:_all)
+        .with(*search_arguments, wait: 0)
+        .and_return(%i[element1 element2])
     end
 
-    class YetAnotherPageWithSections < SitePrism::Page
-      # in order to test method name collisions with rspec, we'll include its matchers
-      include RSpec::Matchers
+    it 'should use default arguments' do
+      expect(SitePrism::Section)
+        .to receive(:new).with(subject, :element1).ordered
+      expect(SitePrism::Section)
+        .to receive(:new).with(subject, :element2).ordered
 
-      section  :some_things,  SomePageWithSectionsThatNeedsTestingForExistence, '.bob'
-      sections :other_things, SomePageWithSectionsThatNeedsTestingForExistence, '.tim'
+      subject.plural_sections_with_defaults
     end
-
-    page = YetAnotherPageWithSections.new
-    expect(page).to respond_to :has_some_things?
-    expect(page).to respond_to :has_other_things?
-    # will throw a NoMethodError if methods overwritten by rspec matchers are called
-    expect { page.other_things }.not_to raise_error
   end
 end
